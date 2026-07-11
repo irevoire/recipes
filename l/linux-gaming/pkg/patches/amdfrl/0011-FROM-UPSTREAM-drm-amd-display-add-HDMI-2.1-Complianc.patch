@@ -1,0 +1,121 @@
+From facfbbf63d920f2e696f4ed87eab79ad602b18e3 Mon Sep 17 00:00:00 2001
+From: Fangzhi Zuo <Jerry.Zuo@amd.com>
+Date: Tue, 28 Apr 2026 16:53:29 -0400
+Subject: [PATCH 11/13] [FROM-UPSTREAM] drm/amd/display: add HDMI 2.1
+ Compliance Support
+
+Add force yuv format from igt for compliance test.
+
+Signed-off-by: Fangzhi Zuo <Jerry.Zuo@amd.com>
+Reviewed-by: Harry Wentland <harry.wentland@amd.com>
+Tested-by: Dan Wheeler <daniel.wheeler@amd.com>
+Signed-off-by: Alex Deucher <alexander.deucher@amd.com>
+---
+ .../gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.c | 16 ++++++++---
+ .../gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.h |  1 +
+ .../amd/display/amdgpu_dm/amdgpu_dm_debugfs.c | 28 +++++++++++++++++++
+ 3 files changed, 41 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.c b/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.c
+index 3dbbf4bc1dbd..bc4b8a7b1039 100644
+--- a/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.c
++++ b/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.c
+@@ -6790,18 +6790,26 @@ static void fill_stream_properties_from_drm_display_mode(
+ 	timing_out->v_border_bottom = 0;
+ 	/* TODO: un-hardcode */
+ 	if (drm_mode_is_420_only(info, mode_in)
+-			&& stream->signal == SIGNAL_TYPE_HDMI_TYPE_A)
++			&& (stream->signal == SIGNAL_TYPE_HDMI_TYPE_A ||
++			    stream->signal == SIGNAL_TYPE_HDMI_FRL)
++			&& aconnector
++			&& aconnector->force_yuv_pixel_format == PIXEL_ENCODING_YCBCR420)
+ 		timing_out->pixel_encoding = PIXEL_ENCODING_YCBCR420;
+ 	else if (drm_mode_is_420_also(info, mode_in)
+ 			&& aconnector
+-			&& aconnector->force_yuv420_output)
++			&& (aconnector->force_yuv_pixel_format == PIXEL_ENCODING_YCBCR420
++			|| aconnector->force_yuv420_output))
+ 		timing_out->pixel_encoding = PIXEL_ENCODING_YCBCR420;
+ 	else if ((connector->display_info.color_formats & BIT(DRM_OUTPUT_COLOR_FORMAT_YCBCR422))
+ 			&& aconnector
+-			&& aconnector->force_yuv422_output)
++			&& (aconnector->force_yuv_pixel_format == PIXEL_ENCODING_YCBCR422
++			|| aconnector->force_yuv422_output))
+ 		timing_out->pixel_encoding = PIXEL_ENCODING_YCBCR422;
+ 	else if ((connector->display_info.color_formats & BIT(DRM_OUTPUT_COLOR_FORMAT_YCBCR444))
+-			&& stream->signal == SIGNAL_TYPE_HDMI_TYPE_A)
++			&& (stream->signal == SIGNAL_TYPE_HDMI_TYPE_A ||
++			    stream->signal == SIGNAL_TYPE_HDMI_FRL)
++			&& aconnector
++			&& aconnector->force_yuv_pixel_format == PIXEL_ENCODING_YCBCR444)
+ 		timing_out->pixel_encoding = PIXEL_ENCODING_YCBCR444;
+ 	else
+ 		timing_out->pixel_encoding = PIXEL_ENCODING_RGB;
+diff --git a/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.h b/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.h
+index 74a8fe1a1999..fd7ee8a98d51 100644
+--- a/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.h
++++ b/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.h
+@@ -834,6 +834,7 @@ struct amdgpu_dm_connector {
+ 	bool fake_enable;
+ 	bool force_yuv420_output;
+ 	bool force_yuv422_output;
++	uint8_t force_yuv_pixel_format;
+ 	struct dsc_preferred_settings dsc_settings;
+ 	union dp_downstream_port_present mst_downstream_port_present;
+ 	/* Cached display modes */
+diff --git a/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm_debugfs.c b/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm_debugfs.c
+index 3a3d01ce0d42..0dedaf23d694 100644
+--- a/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm_debugfs.c
++++ b/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm_debugfs.c
+@@ -3141,6 +3141,7 @@ static int force_yuv420_output_set(void *data, u64 val)
+ 	struct amdgpu_dm_connector *connector = data;
+ 
+ 	connector->force_yuv420_output = (bool)val;
++	connector->force_yuv_pixel_format = PIXEL_ENCODING_YCBCR420;
+ 
+ 	return 0;
+ }
+@@ -3160,6 +3161,31 @@ static int force_yuv420_output_get(void *data, u64 *val)
+ DEFINE_DEBUGFS_ATTRIBUTE(force_yuv420_output_fops, force_yuv420_output_get,
+ 			 force_yuv420_output_set, "%llu\n");
+ 
++static int force_yuv422_output_set(void *data, u64 val)
++{
++      struct amdgpu_dm_connector *connector = data;
++
++      connector->force_yuv422_output = (bool)val;
++      connector->force_yuv_pixel_format = PIXEL_ENCODING_YCBCR422;
++
++      return 0;
++}
++
++DEFINE_DEBUGFS_ATTRIBUTE(force_yuv422_output_fops, NULL,
++                       force_yuv422_output_set, "%llu\n");
++
++static int force_yuv444_output_set(void *data, u64 val)
++{
++      struct amdgpu_dm_connector *connector = data;
++
++      connector->force_yuv_pixel_format = PIXEL_ENCODING_YCBCR444;
++
++      return 0;
++}
++
++DEFINE_DEBUGFS_ATTRIBUTE(force_yuv444_output_fops, NULL,
++                       force_yuv444_output_set, "%llu\n");
++
+ /*
+  *  Read Replay state
+  */
+@@ -3500,6 +3526,8 @@ static const struct {
+ 	const struct file_operations *fops;
+ } connector_debugfs_entries[] = {
+ 		{"force_yuv420_output", &force_yuv420_output_fops},
++		{"force_yuv422_output", &force_yuv422_output_fops},
++		{"force_yuv444_output", &force_yuv444_output_fops},
+ 		{"trigger_hotplug", &trigger_hotplug_debugfs_fops},
+ 		{"internal_display", &internal_display_fops},
+ 		{"odm_combine_segments", &odm_combine_segments_fops}
+-- 
+2.55.0
+

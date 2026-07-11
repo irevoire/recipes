@@ -1,0 +1,169 @@
+From e13d7181625d71c8e00360b68aba945e2f628693 Mon Sep 17 00:00:00 2001
+From: Gaghik Khachatrian <gaghik.khachatrian@amd.com>
+Date: Wed, 29 Apr 2026 22:59:42 -0400
+Subject: [PATCH] drm/amd/display: Fix enum decl warnings
+
+[Why]
+warnings were triggered by enum forward declarations that are not
+valid in C++ without an explicit underlying type.
+
+[How]
+- Replace problematic enum forward declarations with C++-safe forms where
+  applicable.
+- Use plain integer types for interface-only declarations that do not
+  require strong enum typing.
+- Update dependent winterface signatures and related type usage
+  consistently.
+- Add required include and type-visibility fixes to avoid follow-on parse
+  and type-resolution issues.
+
+Reviewed-by: Aric Cyr <aric.cyr@amd.com>
+Signed-off-by: Gaghik Khachatrian <gaghik.khachatrian@amd.com>
+Signed-off-by: James Lin <pinglei.lin@amd.com>
+Tested-by: Daniel Wheeler <daniel.wheeler@amd.com>
+Signed-off-by: Alex Deucher <alexander.deucher@amd.com>
+---
+ drivers/gpu/drm/amd/display/dc/dm_helpers.h   |  1 +
+ .../amd/display/modules/inc/mod_color_types.h | 47 +++++++++++++++++++
+ .../amd/display/modules/inc/mod_info_packet.h |  9 +---
+ .../modules/inc/mod_info_packet_types.h       | 37 +++++++++++++++
+ 4 files changed, 86 insertions(+), 8 deletions(-)
+ create mode 100644 drivers/gpu/drm/amd/display/modules/inc/mod_color_types.h
+ create mode 100644 drivers/gpu/drm/amd/display/modules/inc/mod_info_packet_types.h
+
+diff --git a/drivers/gpu/drm/amd/display/dc/dm_helpers.h b/drivers/gpu/drm/amd/display/dc/dm_helpers.h
+index 107aec6a126579..63704d21a0b5c4 100644
+--- a/drivers/gpu/drm/amd/display/dc/dm_helpers.h
++++ b/drivers/gpu/drm/amd/display/dc/dm_helpers.h
+@@ -30,6 +30,7 @@
+ #ifndef __DM_HELPERS__
+ #define __DM_HELPERS__
+ 
++#include "modules/inc/mod_info_packet_types.h"
+ #include "dc_types.h"
+ #include "dc.h"
+ 
+diff --git a/drivers/gpu/drm/amd/display/modules/inc/mod_color_types.h b/drivers/gpu/drm/amd/display/modules/inc/mod_color_types.h
+new file mode 100644
+index 00000000000000..bf7313df585b6e
+--- /dev/null
++++ b/drivers/gpu/drm/amd/display/modules/inc/mod_color_types.h
+@@ -0,0 +1,47 @@
++/*
++ * Copyright 2019 Advanced Micro Devices, Inc.
++ *
++ * Permission is hereby granted, free of charge, to any person obtaining a
++ * copy of this software and associated documentation files (the "Software"),
++ * to deal in the Software without restriction, including without limitation
++ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
++ * and/or sell copies of the Software, and to permit persons to whom the
++ * Software is furnished to do so, subject to the following conditions:
++ *
++ * The above copyright notice and this permission notice shall be included in
++ * all copies or substantial portions of the Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
++ * THE COPYRIGHT HOLDER(S) OR AUTHOR(S) BE LIABLE FOR ANY CLAIM, DAMAGES OR
++ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
++ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
++ * OTHER DEALINGS IN THE SOFTWARE.
++ *
++ * Authors: AMD
++ *
++ */
++
++#ifndef MOD_COLOR_TYPES_H_
++#define MOD_COLOR_TYPES_H_
++
++enum predefined_gamut_type {
++	gamut_type_bt709,
++	gamut_type_bt601,
++	gamut_type_adobe_rgb,
++	gamut_type_srgb,
++	gamut_type_bt2020,
++	gamut_type_dcip3,
++	gamut_type_unknown,
++};
++
++enum predefined_white_point_type {
++	white_point_type_5000k_horizon,
++	white_point_type_6500k_noon,
++	white_point_type_7500k_north_sky,
++	white_point_type_9300k,
++	white_point_type_unknown,
++};
++
++#endif /* MOD_COLOR_TYPES_H_ */
+\ No newline at end of file
+diff --git a/drivers/gpu/drm/amd/display/modules/inc/mod_info_packet.h b/drivers/gpu/drm/amd/display/modules/inc/mod_info_packet.h
+index ddd64b7e4c0474..11b127eb13d841 100644
+--- a/drivers/gpu/drm/amd/display/modules/inc/mod_info_packet.h
++++ b/drivers/gpu/drm/amd/display/modules/inc/mod_info_packet.h
+@@ -27,6 +27,7 @@
+ #define MOD_INFO_PACKET_H_
+ 
+ #include "dm_services.h"
++#include "mod_info_packet_types.h"
+ #include "mod_shared.h"
+ //Forward Declarations
+ struct dc_stream_state;
+@@ -47,14 +48,6 @@ void mod_build_vsc_infopacket(const struct dc_stream_state *stream,
+ void mod_build_hf_vsif_infopacket(const struct dc_stream_state *stream,
+ 		struct dc_info_packet *info_packet);
+ 
+-enum adaptive_sync_type {
+-	ADAPTIVE_SYNC_TYPE_NONE                  = 0,
+-	ADAPTIVE_SYNC_TYPE_DP                    = 1,
+-	FREESYNC_TYPE_PCON_IN_WHITELIST          = 2,
+-	FREESYNC_TYPE_PCON_NOT_IN_WHITELIST      = 3,
+-	ADAPTIVE_SYNC_TYPE_EDP                   = 4,
+-};
+-
+ enum adaptive_sync_sdp_version {
+ 	AS_SDP_VER_0 = 0x0,
+ 	AS_SDP_VER_1 = 0x1,
+diff --git a/drivers/gpu/drm/amd/display/modules/inc/mod_info_packet_types.h b/drivers/gpu/drm/amd/display/modules/inc/mod_info_packet_types.h
+new file mode 100644
+index 00000000000000..30a5259ef36b46
+--- /dev/null
++++ b/drivers/gpu/drm/amd/display/modules/inc/mod_info_packet_types.h
+@@ -0,0 +1,37 @@
++/*
++ * Copyright 2018 Advanced Micro Devices, Inc.
++ *
++ * Permission is hereby granted, free of charge, to any person obtaining a
++ * copy of this software and associated documentation files (the "Software"),
++ * to deal in the Software without restriction, including without limitation
++ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
++ * and/or sell copies of the Software, and to permit persons to whom the
++ * Software is furnished to do so, subject to the following conditions:
++ *
++ * The above copyright notice and this permission notice shall be included in
++ * all copies or substantial portions of the Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
++ * THE COPYRIGHT HOLDER(S) OR AUTHOR(S) BE LIABLE FOR ANY CLAIM, DAMAGES OR
++ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
++ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
++ * OTHER DEALINGS IN THE SOFTWARE.
++ *
++ * Authors: AMD
++ *
++ */
++
++#ifndef MOD_INFO_PACKET_TYPES_H_
++#define MOD_INFO_PACKET_TYPES_H_
++
++enum adaptive_sync_type {
++	ADAPTIVE_SYNC_TYPE_NONE                  = 0,
++	ADAPTIVE_SYNC_TYPE_DP                    = 1,
++	FREESYNC_TYPE_PCON_IN_WHITELIST          = 2,
++	FREESYNC_TYPE_PCON_NOT_IN_WHITELIST      = 3,
++	ADAPTIVE_SYNC_TYPE_EDP                   = 4,
++};
++
++#endif /* MOD_INFO_PACKET_TYPES_H_ */

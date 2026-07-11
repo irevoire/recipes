@@ -1,0 +1,135 @@
+From c45d25943e2c5dae6499c504f66b340e223cb33a Mon Sep 17 00:00:00 2001
+From: Fangzhi Zuo <Jerry.Zuo@amd.com>
+Date: Wed, 13 May 2026 17:02:03 -0400
+Subject: [PATCH 13/13] [FROM-UPSTREAM] drm/amd/display: Disable FRL and add
+ module param to enable it
+
+FRL links don't yet support VRR. If we enable it by default
+users will see a functional regression when connected to an FRL
+capable display as the driver will now default to FRL and not
+allow VRR.
+
+VRR support will come soon, so instead of making an elaborate
+TMDS fallback mechanism simply default FRL to disabled, but
+provide a dcfeaturemask of 0x400 to enable it if anyone wants
+to already try it out.
+
+Reviewed-by: Harry Wentland <harry.wentland@amd.com>
+Signed-off-by: Fangzhi Zuo <Jerry.Zuo@amd.com>
+Signed-off-by: Harry Wentland <harry.wentland@amd.com>
+Signed-off-by: Alex Deucher <alexander.deucher@amd.com>
+---
+ .../gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.c |  3 ++
+ .../gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.h |  2 +-
+ .../amd/display/amdgpu_dm/amdgpu_dm_helpers.c | 30 ++++++++++---------
+ drivers/gpu/drm/amd/display/dc/dc.h           |  1 +
+ drivers/gpu/drm/amd/include/amd_shared.h      |  4 +++
+ 5 files changed, 25 insertions(+), 15 deletions(-)
+
+diff --git a/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.c b/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.c
+index 495f3bd08a17..9fba78fb1c30 100644
+--- a/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.c
++++ b/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.c
+@@ -1983,6 +1983,9 @@ static int amdgpu_dm_init(struct amdgpu_device *adev)
+ 	if (amdgpu_dc_feature_mask & DC_DISABLE_LTTPR_DP2_0)
+ 		init_data.flags.allow_lttpr_non_transparent_mode.bits.DP2_0 = true;
+ 
++	if (amdgpu_dc_feature_mask & DC_FRL_MASK)
++		init_data.flags.enable_frl = true;
++
+ 	init_data.flags.seamless_boot_edp_requested = false;
+ 
+ 	if (amdgpu_device_seamless_boot_supported(adev)) {
+diff --git a/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.h b/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.h
+index fd7ee8a98d51..693b9a99e08f 100644
+--- a/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.h
++++ b/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.h
+@@ -1099,7 +1099,7 @@ int amdgpu_dm_update_plane_color_mgmt(struct dm_crtc_state *crtc,
+ void amdgpu_dm_update_connector_after_detect(
+ 		struct amdgpu_dm_connector *aconnector);
+ 
+-void populate_hdmi_info_from_connector(struct drm_hdmi_info *info,
++void populate_hdmi_info_from_connector(bool enable_frl, struct drm_hdmi_info *info,
+ 				      struct dc_edid_caps *edid_caps);
+ 
+ extern const struct drm_encoder_helper_funcs amdgpu_dm_encoder_helper_funcs;
+diff --git a/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm_helpers.c b/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm_helpers.c
+index 3beb32204391..ee6c48e72924 100644
+--- a/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm_helpers.c
++++ b/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm_helpers.c
+@@ -179,7 +179,7 @@ enum dc_edid_status dm_helpers_parse_edid_caps(
+ 	edid_caps->edid_hdmi = connector->display_info.is_hdmi;
+ 
+ 	if (edid_caps->edid_hdmi) {
+-		populate_hdmi_info_from_connector(&connector->display_info.hdmi, edid_caps);
++		populate_hdmi_info_from_connector(link->dc->config.enable_frl, &connector->display_info.hdmi, edid_caps);
+ 		drm_dbg_driver(connector->dev, "%s: HDMI_FRL [%s] max_frl_rate %d\n", __func__, connector->name, edid_caps->max_frl_rate);
+ 		if (edid_caps->frl_dsc_support)
+ 			drm_dbg_driver(connector->dev, "%s: HDMI_FRL_DSC [%s] frl_dsc_10bpc %d, frl_dsc_12bpc %d, frl_dsc_all_bpp %d, frl_dsc_native_420 %d, frl_dsc_max_slices %d, frl_dsc_max_frl_rate %d, frl_dsc_total_chunk_kbytes %d\n",
+@@ -1124,21 +1124,23 @@ static uint8_t get_dsc_max_slices(uint8_t max_slices, int clk_per_slice)
+ 	return dsc_max_slices;
+ }
+ 
+-void populate_hdmi_info_from_connector(struct drm_hdmi_info *hdmi, struct dc_edid_caps *edid_caps)
++void populate_hdmi_info_from_connector(bool enable_frl, struct drm_hdmi_info *hdmi, struct dc_edid_caps *edid_caps)
+ {
+ 	edid_caps->scdc_present = hdmi->scdc.supported;
+-	edid_caps->max_frl_rate = get_max_frl_rate(hdmi->max_lanes, hdmi->max_frl_rate_per_lane);
+-	edid_caps->frl_dsc_support = hdmi->dsc_cap.v_1p2;
+-	if (edid_caps->frl_dsc_support) {
+-		if (hdmi->dsc_cap.bpc_supported == 10)
+-			edid_caps->frl_dsc_10bpc = true;
+-		else if (hdmi->dsc_cap.bpc_supported == 12)
+-			edid_caps->frl_dsc_12bpc = true;
+-		edid_caps->frl_dsc_all_bpp = hdmi->dsc_cap.all_bpp;
+-		edid_caps->frl_dsc_native_420 = hdmi->dsc_cap.native_420;
+-		edid_caps->frl_dsc_max_slices = get_dsc_max_slices(hdmi->dsc_cap.max_slices, hdmi->dsc_cap.clk_per_slice);
+-		edid_caps->frl_dsc_max_frl_rate = get_max_frl_rate(hdmi->dsc_cap.max_lanes, hdmi->dsc_cap.max_frl_rate_per_lane);
+-		edid_caps->frl_dsc_total_chunk_kbytes = hdmi->dsc_cap.total_chunk_kbytes;
++	if (enable_frl) {
++		edid_caps->max_frl_rate = get_max_frl_rate(hdmi->max_lanes, hdmi->max_frl_rate_per_lane);
++		edid_caps->frl_dsc_support = hdmi->dsc_cap.v_1p2;
++		if (edid_caps->frl_dsc_support) {
++			if (hdmi->dsc_cap.bpc_supported == 10)
++				edid_caps->frl_dsc_10bpc = true;
++			else if (hdmi->dsc_cap.bpc_supported == 12)
++				edid_caps->frl_dsc_12bpc = true;
++			edid_caps->frl_dsc_all_bpp = hdmi->dsc_cap.all_bpp;
++			edid_caps->frl_dsc_native_420 = hdmi->dsc_cap.native_420;
++			edid_caps->frl_dsc_max_slices = get_dsc_max_slices(hdmi->dsc_cap.max_slices, hdmi->dsc_cap.clk_per_slice);
++			edid_caps->frl_dsc_max_frl_rate = get_max_frl_rate(hdmi->dsc_cap.max_lanes, hdmi->dsc_cap.max_frl_rate_per_lane);
++			edid_caps->frl_dsc_total_chunk_kbytes = hdmi->dsc_cap.total_chunk_kbytes;
++		}
+ 	}
+ }
+ 
+diff --git a/drivers/gpu/drm/amd/display/dc/dc.h b/drivers/gpu/drm/amd/display/dc/dc.h
+index 7c191ec0f711..be0431088cd0 100644
+--- a/drivers/gpu/drm/amd/display/dc/dc.h
++++ b/drivers/gpu/drm/amd/display/dc/dc.h
+@@ -589,6 +589,7 @@ struct dc_config {
+ 	int smart_mux_version;
+ 	bool ignore_dpref_ss;
+ 	bool enable_mipi_converter_optimization;
++	bool enable_frl;
+ 	bool force_hdmi21_frl_enc_enable;
+ 	bool skip_frl_pretraining;
+ 	bool use_default_clock_table;
+diff --git a/drivers/gpu/drm/amd/include/amd_shared.h b/drivers/gpu/drm/amd/include/amd_shared.h
+index ac2d3701e2bd..3fd38323a88b 100644
+--- a/drivers/gpu/drm/amd/include/amd_shared.h
++++ b/drivers/gpu/drm/amd/include/amd_shared.h
+@@ -286,6 +286,10 @@ enum DC_FEATURE_MASK {
+ 	 * @DC_REPLAY_MASK: (0x200) disabled by default for DCN < 3.1.4
+ 	 */
+ 	DC_REPLAY_MASK = (1 << 9),
++	/**
++	 * @DC_FRL_MASK: (0x400) disabled by default
++	 */
++	DC_FRL_MASK = (1 << 10),
+ };
+ 
+ /**
+-- 
+2.55.0
+

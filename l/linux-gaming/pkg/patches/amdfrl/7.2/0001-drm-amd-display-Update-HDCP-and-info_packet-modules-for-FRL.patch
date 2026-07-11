@@ -1,0 +1,319 @@
+From 952df08d5b2d39d841da69ff5e58be924886abf8 Mon Sep 17 00:00:00 2001
+From: Harry Wentland <harry.wentland@amd.com>
+Date: Fri, 24 Apr 2026 14:31:43 -0400
+Subject: [PATCH] drm/amd/display: Update HDCP and info_packet modules for FRL
+
+The HDCP module has a minor update for FRL, and info_packet is
+updated for ALLM.
+
+Signed-off-by: Harry Wentland <harry.wentland@amd.com>
+Reviewed-by: Fangzhi Zuo <Jerry.Zuo@amd.com>
+Tested-by: Dan Wheeler <daniel.wheeler@amd.com>
+Signed-off-by: Alex Deucher <alexander.deucher@amd.com>
+---
+ .../gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.c |   2 +-
+ .../gpu/drm/amd/display/modules/hdcp/hdcp.c   |   2 +
+ .../gpu/drm/amd/display/modules/hdcp/hdcp.h   |   6 +
+ .../drm/amd/display/modules/hdcp/hdcp_psp.c   |   2 +
+ .../drm/amd/display/modules/hdcp/hdcp_psp.h   |   2 +
+ .../amd/display/modules/inc/mod_freesync.h    |   3 +
+ .../drm/amd/display/modules/inc/mod_hdcp.h    |   1 +
+ .../amd/display/modules/inc/mod_info_packet.h |   2 +-
+ .../display/modules/info_packet/info_packet.c | 134 +++++++++++++-----
+ 9 files changed, 118 insertions(+), 36 deletions(-)
+
+diff --git a/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.c b/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.c
+index 94da226513c0aa..2aac1ce5b4e368 100644
+--- a/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.c
++++ b/drivers/gpu/drm/amd/display/amdgpu_dm/amdgpu_dm.c
+@@ -7620,7 +7620,7 @@ create_stream_for_sink(struct drm_connector *connector,
+ 	update_stream_signal(stream, sink);
+ 
+ 	if (stream->signal == SIGNAL_TYPE_HDMI_TYPE_A)
+-		mod_build_hf_vsif_infopacket(stream, &stream->vsp_infopacket);
++		mod_build_hf_vsif_infopacket(stream, &stream->vsp_infopacket, false, false);
+ 
+ 	if (stream->signal == SIGNAL_TYPE_DISPLAY_PORT ||
+ 	    stream->signal == SIGNAL_TYPE_DISPLAY_PORT_MST ||
+diff --git a/drivers/gpu/drm/amd/display/modules/hdcp/hdcp.c b/drivers/gpu/drm/amd/display/modules/hdcp/hdcp.c
+index ca402ddcdacc82..fbab100c0e7ba2 100644
+--- a/drivers/gpu/drm/amd/display/modules/hdcp/hdcp.c
++++ b/drivers/gpu/drm/amd/display/modules/hdcp/hdcp.c
+@@ -66,6 +66,7 @@ static uint8_t is_cp_desired_hdcp1(struct mod_hdcp *hdcp)
+ 
+ 	return is_auth_needed &&
+ 			!hdcp->connection.link.adjust.hdcp1.disable &&
++			!is_frl_hdcp(hdcp) &&
+ 			!hdcp->connection.is_hdcp1_revoked;
+ }
+ 
+@@ -584,6 +585,7 @@ enum mod_hdcp_operation_mode mod_hdcp_signal_type_to_operation_mode(
+ 	switch (signal) {
+ 	case SIGNAL_TYPE_DVI_SINGLE_LINK:
+ 	case SIGNAL_TYPE_HDMI_TYPE_A:
++	case SIGNAL_TYPE_HDMI_FRL:
+ 		mode = MOD_HDCP_MODE_DEFAULT;
+ 		break;
+ 	case SIGNAL_TYPE_EDP:
+diff --git a/drivers/gpu/drm/amd/display/modules/hdcp/hdcp.h b/drivers/gpu/drm/amd/display/modules/hdcp/hdcp.h
+index d07387a961dd90..92c128ffe2ddc6 100644
+--- a/drivers/gpu/drm/amd/display/modules/hdcp/hdcp.h
++++ b/drivers/gpu/drm/amd/display/modules/hdcp/hdcp.h
+@@ -406,6 +406,12 @@ static inline uint8_t is_hdmi_dvi_sl_hdcp(struct mod_hdcp *hdcp)
+ 	return (hdcp->connection.link.mode == MOD_HDCP_MODE_DEFAULT);
+ }
+ 
++static inline uint8_t is_frl_hdcp(struct mod_hdcp *hdcp)
++{
++	return (hdcp->connection.link.mode == MOD_HDCP_MODE_DEFAULT &&
++			hdcp->connection.link.hdmi.frl_enabled);
++}
++
+ /* hdcp state helpers */
+ static inline uint8_t current_state(struct mod_hdcp *hdcp)
+ {
+diff --git a/drivers/gpu/drm/amd/display/modules/hdcp/hdcp_psp.c b/drivers/gpu/drm/amd/display/modules/hdcp/hdcp_psp.c
+index 6b7db8ec9a53b2..d32df3b869f91f 100644
+--- a/drivers/gpu/drm/amd/display/modules/hdcp/hdcp_psp.c
++++ b/drivers/gpu/drm/amd/display/modules/hdcp/hdcp_psp.c
+@@ -200,6 +200,8 @@ static enum mod_hdcp_status add_display_to_topology_v3(
+ 			TA_DTM_HDCP_VERSION_MAX_SUPPORTED__2_3;
+ 	dtm_cmd->dtm_in_message.topology_update_v3.encoder_type = TA_DTM_ENCODER_TYPE__DIG;
+ 	dtm_cmd->dtm_status = TA_DTM_STATUS__GENERIC_FAILURE;
++	if (is_frl_hdcp(hdcp))
++		dtm_cmd->dtm_in_message.topology_update_v3.encoder_type = TA_DTM_ENCODER_TYPE__FRL;
+ 	dtm_cmd->dtm_in_message.topology_update_v3.phy_id = link->phy_idx;
+ 	dtm_cmd->dtm_in_message.topology_update_v3.link_hdcp_cap = link->hdcp_supported_informational;
+ 	dtm_cmd->dtm_in_message.topology_update_v3.dio_output_type = link->dp.usb4_enabled ?
+diff --git a/drivers/gpu/drm/amd/display/modules/hdcp/hdcp_psp.h b/drivers/gpu/drm/amd/display/modules/hdcp/hdcp_psp.h
+index 7844ea91650bf3..1f9ac8537d5311 100644
+--- a/drivers/gpu/drm/amd/display/modules/hdcp/hdcp_psp.h
++++ b/drivers/gpu/drm/amd/display/modules/hdcp/hdcp_psp.h
+@@ -84,6 +84,7 @@ struct ta_dtm_topology_update_input_v2 {
+ 	uint32_t dig_fe;
+ 	uint32_t dp_mst_vcid;
+ 	uint32_t is_assr;
++	/*uint32_t is_frl;*/ /*todo*/
+ 	uint32_t max_hdcp_supported_version;
+ };
+ 
+@@ -91,6 +92,7 @@ struct ta_dtm_topology_update_input_v2 {
+ /* Security code will check real HW register values and these SW enum values */
+ enum ta_dtm_encoder_type {
+ 	TA_DTM_ENCODER_TYPE__INVALID    = 0,
++	TA_DTM_ENCODER_TYPE__FRL        = 0x20,
+ 	TA_DTM_ENCODER_TYPE__DIG        = 0x10
+ };
+ 
+diff --git a/drivers/gpu/drm/amd/display/modules/inc/mod_freesync.h b/drivers/gpu/drm/amd/display/modules/inc/mod_freesync.h
+index 57916ed98c86e8..c042fb1bf49c0b 100644
+--- a/drivers/gpu/drm/amd/display/modules/inc/mod_freesync.h
++++ b/drivers/gpu/drm/amd/display/modules/inc/mod_freesync.h
+@@ -90,6 +90,7 @@ struct mod_vrr_params_flip_interval {
+ struct mod_vrr_params {
+ 	bool supported;
+ 	bool send_info_frame;
++	bool m_const_engaged; // this is used when m_const is set up in OPTC so no overriding happens from FreeSync Module
+ 	enum mod_vrr_state state;
+ 
+ 	uint32_t min_refresh_in_uhz;
+@@ -98,6 +99,8 @@ struct mod_vrr_params {
+ 	uint32_t min_duration_in_us;
+ 	uint32_t fixed_refresh_in_uhz;
+ 
++	uint32_t m_const;
++
+ 	struct dc_crtc_timing_adjust adjust;
+ 
+ 	struct mod_vrr_params_fixed_refresh fixed;
+diff --git a/drivers/gpu/drm/amd/display/modules/inc/mod_hdcp.h b/drivers/gpu/drm/amd/display/modules/inc/mod_hdcp.h
+index 83546722545891..d492a59e093906 100644
+--- a/drivers/gpu/drm/amd/display/modules/inc/mod_hdcp.h
++++ b/drivers/gpu/drm/amd/display/modules/inc/mod_hdcp.h
+@@ -114,6 +114,7 @@ struct mod_hdcp_displayport {
+ };
+ 
+ struct mod_hdcp_hdmi {
++	uint8_t frl_enabled;
+ 	uint8_t reserved;
+ };
+ enum mod_hdcp_operation_mode {
+diff --git a/drivers/gpu/drm/amd/display/modules/inc/mod_info_packet.h b/drivers/gpu/drm/amd/display/modules/inc/mod_info_packet.h
+index 11b127eb13d841..eee8206bc531a8 100644
+--- a/drivers/gpu/drm/amd/display/modules/inc/mod_info_packet.h
++++ b/drivers/gpu/drm/amd/display/modules/inc/mod_info_packet.h
+@@ -46,7 +46,7 @@ void mod_build_vsc_infopacket(const struct dc_stream_state *stream,
+ 		enum color_transfer_func tf);
+ 
+ void mod_build_hf_vsif_infopacket(const struct dc_stream_state *stream,
+-		struct dc_info_packet *info_packet);
++		struct dc_info_packet *info_packet, int ALLMEnabled, int ALLMValue);
+ 
+ enum adaptive_sync_sdp_version {
+ 	AS_SDP_VER_0 = 0x0,
+diff --git a/drivers/gpu/drm/amd/display/modules/info_packet/info_packet.c b/drivers/gpu/drm/amd/display/modules/info_packet/info_packet.c
+index 55c7250f18d848..fa05547c615ade 100644
+--- a/drivers/gpu/drm/amd/display/modules/info_packet/info_packet.c
++++ b/drivers/gpu/drm/amd/display/modules/info_packet/info_packet.c
+@@ -504,13 +504,16 @@ void mod_build_vsc_infopacket(const struct dc_stream_state *stream,
+  *  @info_packet: output structure where to store VSIF
+  */
+ void mod_build_hf_vsif_infopacket(const struct dc_stream_state *stream,
+-		struct dc_info_packet *info_packet)
++		struct dc_info_packet *info_packet, int ALLMEnabled, int ALLMValue)
+ {
+ 		unsigned int length = 5;
+ 		bool hdmi_vic_mode = false;
+ 		uint8_t checksum = 0;
+ 		uint32_t i = 0;
+ 		enum dc_timing_3d_format format;
++		bool bALLM = (bool)ALLMEnabled;
++		bool bALLMVal = (bool)ALLMValue;
++		int CCBPC = 0;
+ 
+ 		info_packet->valid = false;
+ 		format = stream->timing.timing_3d_format;
+@@ -523,47 +526,110 @@ void mod_build_hf_vsif_infopacket(const struct dc_stream_state *stream,
+ 				&& format == TIMING_3D_FORMAT_NONE)
+ 			hdmi_vic_mode = true;
+ 
+-		if ((format == TIMING_3D_FORMAT_NONE) && !hdmi_vic_mode)
++		if ((format == TIMING_3D_FORMAT_NONE) && !hdmi_vic_mode && !bALLM)
+ 			return;
+ 
+-		info_packet->sb[1] = 0x03;
+-		info_packet->sb[2] = 0x0C;
+-		info_packet->sb[3] = 0x00;
+-
+-		if (format != TIMING_3D_FORMAT_NONE)
+-			info_packet->sb[4] = (2 << 5);
+-
+-		else if (hdmi_vic_mode)
+-			info_packet->sb[4] = (1 << 5);
+-
+-		switch (format) {
+-		case TIMING_3D_FORMAT_HW_FRAME_PACKING:
+-		case TIMING_3D_FORMAT_SW_FRAME_PACKING:
+-			info_packet->sb[5] = (0x0 << 4);
+-			break;
+-
+-		case TIMING_3D_FORMAT_SIDE_BY_SIDE:
+-		case TIMING_3D_FORMAT_SBS_SW_PACKED:
+-			info_packet->sb[5] = (0x8 << 4);
+-			length = 6;
+-			break;
+-
+-		case TIMING_3D_FORMAT_TOP_AND_BOTTOM:
+-		case TIMING_3D_FORMAT_TB_SW_PACKED:
+-			info_packet->sb[5] = (0x6 << 4);
+-			break;
+-
+-		default:
+-			break;
++		if (!bALLM) {
++			info_packet->sb[1] = 0x03;
++			info_packet->sb[2] = 0x0C;
++			info_packet->sb[3] = 0x00;
++
++			if (format != TIMING_3D_FORMAT_NONE)
++				info_packet->sb[4] = (2 << 5);
++			else if (hdmi_vic_mode)
++				info_packet->sb[4] = (1 << 5);
++
++			switch (format) {
++			case TIMING_3D_FORMAT_HW_FRAME_PACKING:
++			case TIMING_3D_FORMAT_SW_FRAME_PACKING:
++				info_packet->sb[5] = (0x0 << 4);
++				break;
++
++			case TIMING_3D_FORMAT_SIDE_BY_SIDE:
++			case TIMING_3D_FORMAT_SBS_SW_PACKED:
++				info_packet->sb[5] = (0x8 << 4);
++				length = 6;
++				break;
++
++			case TIMING_3D_FORMAT_TOP_AND_BOTTOM:
++			case TIMING_3D_FORMAT_TB_SW_PACKED:
++				info_packet->sb[5] = (0x6 << 4);
++				break;
++
++			default:
++				break;
++			}
++
++			if (hdmi_vic_mode) {
++				ASSERT(stream->timing.hdmi_vic <= 0xFF);
++				info_packet->sb[5] = (uint8_t)stream->timing.hdmi_vic;
++			}
++		} else {
++			info_packet->sb[1] = 0xD8;
++			info_packet->sb[2] = 0x5D;
++			info_packet->sb[3] = 0xC4;
++			info_packet->sb[4] = HF_VSIF_VERSION;
++
++			if (format != TIMING_3D_FORMAT_NONE) {
++				info_packet->sb[5] |= 0x01;
++				length = 6;
++				switch (format) {
++				case TIMING_3D_FORMAT_HW_FRAME_PACKING:
++				case TIMING_3D_FORMAT_SW_FRAME_PACKING:
++					info_packet->sb[6] = (0x0 << 4);
++					break;
++
++				case TIMING_3D_FORMAT_SIDE_BY_SIDE:
++				case TIMING_3D_FORMAT_SBS_SW_PACKED:
++					info_packet->sb[6] = (0x8 << 4);
++					break;
++
++				case TIMING_3D_FORMAT_TOP_AND_BOTTOM:
++				case TIMING_3D_FORMAT_TB_SW_PACKED:
++					info_packet->sb[6] = (0x6 << 4);
++					break;
++
++				default:
++					break;
++				}
++			}
++
++			info_packet->sb[5] = (info_packet->sb[5] & ~0x02) | (bALLMVal << 1);
++
++			switch (stream->timing.display_color_depth) {
++			case COLOR_DEPTH_888:
++				CCBPC = 1;
++				break;
++			case COLOR_DEPTH_101010:
++				CCBPC = 3;
++				break;
++			case COLOR_DEPTH_121212:
++				CCBPC = 5;
++				break;
++			case COLOR_DEPTH_161616:
++				CCBPC = 9;
++				break;
++
++			case COLOR_DEPTH_UNDEFINED:
++			case COLOR_DEPTH_666:
++#ifdef CONFIG_DRM_AMD_DC_DCN2_0
++			case COLOR_DEPTH_999:
++			case COLOR_DEPTH_111111:
++#endif
++			case COLOR_DEPTH_141414:
++			default:
++				break;
++			}
++
++			info_packet->sb[5] = (uint8_t)((info_packet->sb[5] & ~0xF0) | (CCBPC << 4));
+ 		}
+ 
+-		if (hdmi_vic_mode)
+-			info_packet->sb[5] = stream->timing.hdmi_vic;
+-
+ 		info_packet->hb0 = HDMI_INFOFRAME_TYPE_VENDOR;
+ 		info_packet->hb1 = 0x01;
+ 		info_packet->hb2 = (uint8_t) (length);
+ 
++
++
+ 		checksum += info_packet->hb0;
+ 		checksum += info_packet->hb1;
+ 		checksum += info_packet->hb2;

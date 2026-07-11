@@ -1,0 +1,212 @@
+From 613f21c35e000e52d26ee09754951672d9037c0a Mon Sep 17 00:00:00 2001
+From: Harry Wentland <harry.wentland@amd.com>
+Date: Fri, 24 Apr 2026 12:22:18 -0400
+Subject: [PATCH 07/13] [FROM-UPSTREAM] drm/amd/display: Add FRL support to
+ clk_mgr, dsc, hdcp
+
+This adds a few, relatively minor, changes for FRL to
+clk_mgr, DSC, and HDCP blocks.
+
+Signed-off-by: Harry Wentland <harry.wentland@amd.com>
+Reviewed-by: Fangzhi Zuo <Jerry.Zuo@amd.com>
+Tested-by: Dan Wheeler <daniel.wheeler@amd.com>
+Signed-off-by: Alex Deucher <alexander.deucher@amd.com>
+---
+ .../display/dc/clk_mgr/dcn31/dcn31_clk_mgr.c  |  3 +++
+ .../dc/clk_mgr/dcn314/dcn314_clk_mgr.c        |  3 +++
+ .../dc/clk_mgr/dcn315/dcn315_clk_mgr.c        |  3 +++
+ .../dc/clk_mgr/dcn316/dcn316_clk_mgr.c        |  3 +++
+ .../display/dc/clk_mgr/dcn32/dcn32_clk_mgr.c  | 12 +++++++++++
+ .../display/dc/clk_mgr/dcn35/dcn35_clk_mgr.c  | 14 +++++++++++++
+ .../dc/clk_mgr/dcn401/dcn401_clk_mgr.c        | 20 ++++++++++++++++++-
+ drivers/gpu/drm/amd/display/dc/dsc/dsc.h      |  5 +++++
+ .../gpu/drm/amd/display/dc/hdcp/hdcp_msg.c    |  1 +
+ 9 files changed, 63 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/amd/display/dc/clk_mgr/dcn31/dcn31_clk_mgr.c b/drivers/gpu/drm/amd/display/dc/clk_mgr/dcn31/dcn31_clk_mgr.c
+index 89fc482947ef..bc14e65be824 100644
+--- a/drivers/gpu/drm/amd/display/dc/clk_mgr/dcn31/dcn31_clk_mgr.c
++++ b/drivers/gpu/drm/amd/display/dc/clk_mgr/dcn31/dcn31_clk_mgr.c
+@@ -93,6 +93,9 @@ static int dcn31_get_active_display_cnt_wa(
+ 		if (dc_is_dp_signal(stream->signal) && !stream->dpms_off)
+ 			display_count++;
+ 
++		/* FRL can't be tracked by DIG enablement */
++		if (dc_is_hdmi_frl_signal(stream->signal))
++			display_count++;
+ 	}
+ 
+ 	for (i = 0; i < dc->link_count; i++) {
+diff --git a/drivers/gpu/drm/amd/display/dc/clk_mgr/dcn314/dcn314_clk_mgr.c b/drivers/gpu/drm/amd/display/dc/clk_mgr/dcn314/dcn314_clk_mgr.c
+index b08a70a2f571..c7c7c7ee76d4 100644
+--- a/drivers/gpu/drm/amd/display/dc/clk_mgr/dcn314/dcn314_clk_mgr.c
++++ b/drivers/gpu/drm/amd/display/dc/clk_mgr/dcn314/dcn314_clk_mgr.c
+@@ -127,6 +127,9 @@ static int dcn314_get_active_display_cnt_wa(
+ 		if (dc_is_dp_signal(stream->signal) && !stream->dpms_off)
+ 			display_count++;
+ 
++		/* FRL can't be tracked by DIG enablement */
++		if (dc_is_hdmi_frl_signal(stream->signal))
++			display_count++;
+ 	}
+ 
+ 	for (i = 0; i < dc->link_count; i++) {
+diff --git a/drivers/gpu/drm/amd/display/dc/clk_mgr/dcn315/dcn315_clk_mgr.c b/drivers/gpu/drm/amd/display/dc/clk_mgr/dcn315/dcn315_clk_mgr.c
+index 3a651c1a866d..e715fc5f88da 100644
+--- a/drivers/gpu/drm/amd/display/dc/clk_mgr/dcn315/dcn315_clk_mgr.c
++++ b/drivers/gpu/drm/amd/display/dc/clk_mgr/dcn315/dcn315_clk_mgr.c
+@@ -69,6 +69,9 @@ static int dcn315_get_active_display_cnt_wa(
+ 				stream->signal == SIGNAL_TYPE_DVI_SINGLE_LINK ||
+ 				stream->signal == SIGNAL_TYPE_DVI_DUAL_LINK)
+ 			tmds_present = true;
++		/* FRL can't be tracked by DIG enablement */
++		if (dc_is_hdmi_frl_signal(stream->signal))
++			display_count++;
+ 	}
+ 
+ 	for (i = 0; i < dc->link_count; i++) {
+diff --git a/drivers/gpu/drm/amd/display/dc/clk_mgr/dcn316/dcn316_clk_mgr.c b/drivers/gpu/drm/amd/display/dc/clk_mgr/dcn316/dcn316_clk_mgr.c
+index e9d492d8c8d4..d621fc219106 100644
+--- a/drivers/gpu/drm/amd/display/dc/clk_mgr/dcn316/dcn316_clk_mgr.c
++++ b/drivers/gpu/drm/amd/display/dc/clk_mgr/dcn316/dcn316_clk_mgr.c
+@@ -81,6 +81,9 @@ static int dcn316_get_active_display_cnt_wa(
+ 				stream->signal == SIGNAL_TYPE_DVI_SINGLE_LINK ||
+ 				stream->signal == SIGNAL_TYPE_DVI_DUAL_LINK)
+ 			tmds_present = true;
++		/* FRL can't be tracked by DIG enablement */
++		if (dc_is_hdmi_frl_signal(stream->signal))
++			display_count++;
+ 	}
+ 
+ 	for (i = 0; i < dc->link_count; i++) {
+diff --git a/drivers/gpu/drm/amd/display/dc/clk_mgr/dcn32/dcn32_clk_mgr.c b/drivers/gpu/drm/amd/display/dc/clk_mgr/dcn32/dcn32_clk_mgr.c
+index fda6cade30a8..b123bbf142c3 100644
+--- a/drivers/gpu/drm/amd/display/dc/clk_mgr/dcn32/dcn32_clk_mgr.c
++++ b/drivers/gpu/drm/amd/display/dc/clk_mgr/dcn32/dcn32_clk_mgr.c
+@@ -283,6 +283,18 @@ static void dcn32_update_clocks_update_dtb_dto(struct clk_mgr_internal *clk_mgr,
+ 			dto_params.otg_inst = pipe_ctx->stream_res.tg->inst;
+ 			dto_params.ref_dtbclk_khz = ref_dtbclk_khz;
+ 
++			if (dc_is_hdmi_frl_signal(pipe_ctx->stream->signal) ||
++					dccg->ctx->dc->link_srv->dp_is_128b_132b_signal(pipe_ctx)) {
++				dto_params.pixclk_khz = pipe_ctx->stream->timing.pix_clk_100hz / 10;
++
++				if (pipe_ctx->stream_res.audio != NULL)
++					dto_params.req_audio_dtbclk_khz = 24000;
++			}
++
++			if (dc_is_hdmi_signal(pipe_ctx->stream->signal) ||
++					dc_is_dvi_signal(pipe_ctx->stream->signal))
++				dto_params.is_hdmi = true;
++
+ 			dccg->funcs->set_dtbclk_dto(clk_mgr->dccg, &dto_params);
+ 			//dccg->funcs->set_audio_dtbclk_dto(clk_mgr->dccg, &dto_params);
+ 		}
+diff --git a/drivers/gpu/drm/amd/display/dc/clk_mgr/dcn35/dcn35_clk_mgr.c b/drivers/gpu/drm/amd/display/dc/clk_mgr/dcn35/dcn35_clk_mgr.c
+index 2798088842f4..35bc1fb40942 100644
+--- a/drivers/gpu/drm/amd/display/dc/clk_mgr/dcn35/dcn35_clk_mgr.c
++++ b/drivers/gpu/drm/amd/display/dc/clk_mgr/dcn35/dcn35_clk_mgr.c
+@@ -232,6 +232,8 @@ void dcn35_disable_otg_wa(struct clk_mgr *clk_mgr_base, struct dc_state *context
+ 		if (old_pipe->stream && new_pipe->stream && old_pipe->stream == new_pipe->stream) {
+ 			has_active_hpo =  dccg->ctx->dc->link_srv->dp_is_128b_132b_signal(old_pipe) &&
+ 			dccg->ctx->dc->link_srv->dp_is_128b_132b_signal(new_pipe);
++				has_active_hpo = has_active_hpo || (old_pipe->stream->signal == SIGNAL_TYPE_HDMI_FRL &&
++				new_pipe->stream->signal == SIGNAL_TYPE_HDMI_FRL);
+ 
+ 		}
+ 
+@@ -271,6 +273,18 @@ static void dcn35_update_clocks_update_dtb_dto(struct clk_mgr_internal *clk_mgr,
+ 			dto_params.otg_inst = pipe_ctx->stream_res.tg->inst;
+ 			dto_params.ref_dtbclk_khz = ref_dtbclk_khz;
+ 
++			if (dc_is_hdmi_frl_signal(pipe_ctx->stream->signal) ||
++					dccg->ctx->dc->link_srv->dp_is_128b_132b_signal(pipe_ctx)) {
++				dto_params.pixclk_khz = pipe_ctx->stream->timing.pix_clk_100hz / 10;
++
++				if (pipe_ctx->stream_res.audio != NULL)
++					dto_params.req_audio_dtbclk_khz = 24000;
++			}
++
++			if (dc_is_hdmi_signal(pipe_ctx->stream->signal) ||
++					dc_is_dvi_signal(pipe_ctx->stream->signal))
++				dto_params.is_hdmi = true;
++
+ 			dccg->funcs->set_dtbclk_dto(clk_mgr->dccg, &dto_params);
+ 			//dccg->funcs->set_audio_dtbclk_dto(clk_mgr->dccg, &dto_params);
+ 		}
+diff --git a/drivers/gpu/drm/amd/display/dc/clk_mgr/dcn401/dcn401_clk_mgr.c b/drivers/gpu/drm/amd/display/dc/clk_mgr/dcn401/dcn401_clk_mgr.c
+index 82c1a55a2271..54c917ecad52 100644
+--- a/drivers/gpu/drm/amd/display/dc/clk_mgr/dcn401/dcn401_clk_mgr.c
++++ b/drivers/gpu/drm/amd/display/dc/clk_mgr/dcn401/dcn401_clk_mgr.c
+@@ -542,6 +542,7 @@ static void dcn401_update_clocks_update_dtb_dto(struct clk_mgr_internal *clk_mgr
+ 		ASSERT(otg_master->stream_res.pix_clk_params.controller_id >= CONTROLLER_ID_D0);
+ 
+ 		use_hpo_encoder = dccg->ctx->dc->link_srv->dp_is_128b_132b_signal(otg_master);
++		use_hpo_encoder |= dc_is_hdmi_frl_signal(otg_master->stream->signal);
+ 		if (!use_hpo_encoder)
+ 			continue;
+ 
+@@ -1092,6 +1093,9 @@ static unsigned int dcn401_build_update_display_clocks_sequence(
+ 	bool update_dispclk = false;
+ 	bool update_dppclk = false;
+ 	bool dppclk_lowered = false;
++	struct pipe_ctx *otg_master;
++	bool frl_present = false;
++	unsigned int i;
+ 
+ 	unsigned int num_steps = 0;
+ 
+@@ -1123,7 +1127,21 @@ static unsigned int dcn401_build_update_display_clocks_sequence(
+ 			dcn401_is_ppclk_dpm_enabled(clk_mgr_internal, PPCLK_DTBCLK)) {
+ 		/* DCCG requires KHz precision for DTBCLK */
+ 		block_sequence[num_steps].params.update_hardmin_params.ppclk = PPCLK_DTBCLK;
+-		block_sequence[num_steps].params.update_hardmin_params.freq_mhz = khz_to_mhz_ceil(new_clocks->ref_dtbclk_khz);
++		block_sequence[num_steps].params.update_hardmin_params.freq_mhz = (uint16_t)khz_to_mhz_ceil(new_clocks->ref_dtbclk_khz);
++		for (i = 0; i < context->stream_count; i++) {
++			otg_master = resource_get_otg_master_for_stream(
++					&context->res_ctx, context->streams[i]);
++			if (otg_master != NULL &&
++					otg_master->stream != NULL &&
++					dc_is_hdmi_frl_signal(otg_master->stream->signal)) {
++				 frl_present = true;
++				 break;
++			}
++		}
++		if (frl_present)
++			block_sequence[num_steps].params.update_hardmin_params.freq_mhz =
++				(uint16_t)clk_mgr_base->bw_params->clk_table.entries[
++					clk_mgr_base->bw_params->clk_table.num_entries_per_clk.num_dtbclk_levels - 1].dtbclk_mhz;
+ 		block_sequence[num_steps].params.update_hardmin_params.response = &clk_mgr_base->clks.ref_dtbclk_khz;
+ 		block_sequence[num_steps].func = CLK_MGR401_UPDATE_HARDMIN_PPCLK;
+ 		num_steps++;
+diff --git a/drivers/gpu/drm/amd/display/dc/dsc/dsc.h b/drivers/gpu/drm/amd/display/dc/dsc/dsc.h
+index a16c60d8532f..ab37a7eaaf01 100644
+--- a/drivers/gpu/drm/amd/display/dc/dsc/dsc.h
++++ b/drivers/gpu/drm/amd/display/dc/dsc/dsc.h
+@@ -102,6 +102,11 @@ struct dsc_enc_caps {
+ 	int32_t max_total_throughput_mps; /* Maximum total throughput with all the slices combined */
+ 	int32_t max_slice_width;
+ 	uint32_t bpp_increment_div; /* bpp increment divisor, e.g. if 16, it's 1/16th of a bit */
++	bool is_frl;
++	bool is_vic_all_bpp;
++	uint32_t total_chunk_kbytes;
++	uint32_t num_lanes;
++	uint32_t frl_rate;
+ 	uint32_t edp_sink_max_bits_per_pixel;
+ 	bool is_dp;
+ };
+diff --git a/drivers/gpu/drm/amd/display/dc/hdcp/hdcp_msg.c b/drivers/gpu/drm/amd/display/dc/hdcp/hdcp_msg.c
+index 73a1e6a03719..34fc9f56dbef 100644
+--- a/drivers/gpu/drm/amd/display/dc/hdcp/hdcp_msg.c
++++ b/drivers/gpu/drm/amd/display/dc/hdcp/hdcp_msg.c
+@@ -365,6 +365,7 @@ static const struct protection_properties *get_protection_properties_by_signal(
+ 		case SIGNAL_TYPE_DVI_SINGLE_LINK:
+ 		case SIGNAL_TYPE_DVI_DUAL_LINK:
+ 		case SIGNAL_TYPE_HDMI_TYPE_A:
++		case SIGNAL_TYPE_HDMI_FRL:
+ 			return &hdmi_14_protection; //todo version2.2
+ 		case SIGNAL_TYPE_DISPLAY_PORT:
+ 		case SIGNAL_TYPE_DISPLAY_PORT_MST:
+-- 
+2.55.0
+
