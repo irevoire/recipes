@@ -1,0 +1,71 @@
+# SPDX-FileCopyrightText: 2026 aerynOS Developers
+# SPDX-License-Identifier: MPL-2.0
+
+name        : pnet 
+version     : "1"
+release     : 1
+homepage    : https://dotgnu.org/ 
+upstreams   :
+    - git|git://git.git.savannah.gnu.org/dotgnu-pnet/pnet.git : 3baf94734d8dc3fdabba68a8891e67a43ed6c4bd
+summary     : The DotGNU project aims to be for webservices and for C# programs what GNU/Linux is rapidly becoming for desktop and server applications
+description : |
+    UPDATE DESCRIPTION
+license     : UPDATE LICENSE
+networking  : true
+builddeps   :
+    - binary(git)
+    - binary(flex)
+    - binary(bison)
+    - binary(autoconf)
+    - binary(automake)
+    - binutils
+    - binary(sd)
+    - texinfo
+    - bdwgc-devel
+    - libffi-devel
+    - treecc-devel
+tuning      :
+    - lto: false
+setup       : |
+    # That was the default at the time and is causing linking issue if not specified
+    export CFLAGS="$CFLAGS -fcommon -std=gnu89 -O0 -g3 -no-pie -DIL_NO_ASM"
+
+    # The texi syntax changed over time, we don't need to put {} after @center
+    sd '^@center\{(.*)\}$' '@center $1' doc/*.texi
+        
+    # These two functions are not declared anywhere, but since they're only used in a test
+    # I can get rids of the lines entirely
+    sed -i '443,444d' image/test_macros.c
+    # We want to use our own packaged version of libgc and libffi
+    rm -rf libgc libffi
+    
+    # YYLEX was a global variable on yacc at the time.
+    sed -i 's/YYLEX/yylex()/' cscc/csharp/cs_grammar.y
+
+    # The pre-bundled grammars files are outdated. We want to regenerate them
+    find . -regex '.*_grammar\.\(c\|h\)$' -delete
+    find . -regex '.*_scanner\.\(c\|h\)$' -delete
+
+    sed -i "s/FFILIBS='.*libffi\.a'/FFILIBS='-lffi'/" configure.in
+
+    sed -i "s/GCLIBS='.*libgc\.a'/GCLIBS='-lgc'/" configure.in
+    sed -i "s/search_libjit=true/search_libjit=false\nJIT_LIBS=-ljit/" configure.in
+    sed -i '/OPT_SUBDIRS += lib/d' Makefile.am
+    sed -i 's|#include ".*/libgc/include/gc\.h"|#include <gc.h>|' support/hb_gc.c
+    sed -i 's|#include ".*/libgc/include/gc_typed\.h"|#include <gc_typed.h>|' support/hb_gc.c
+    sed -i 's/result = GC_run_thread.*;/result = thread_func(arg);/' support/thread.c
+
+    sed -i 's/= GC_bytes_found;/= ({ struct GC_prof_stats_s _s; GC_get_prof_stats(\&_s, sizeof(_s)); _s.bytes_reclaimed_since_gc; });/g' support/hb_gc.c
+
+    # The gc now ships everything under the `gc` directory (except for gc.h)
+    sed -i 's|#include <gc_typed\.h>|#include <gc/gc_typed.h>|' */*.c
+
+    grep -n "OPT_SUBDIRS" Makefile.am
+
+    mv auto_gen.sh autogen.sh
+    %autogen --with-libffi=no --enable-threads=no
+build       : |
+    # When using multi-threading it sometimes fail
+    %make -j1
+install     : |
+    %make_install
