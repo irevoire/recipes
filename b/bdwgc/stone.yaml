@@ -1,0 +1,22 @@
+# SPDX-FileCopyrightText: 2026 aerynOS Developers
+# SPDX-License-Identifier: MPL-2.0
+
+name        : bdwgc
+version     : "8.2.12"
+release     : 1
+homepage    : https://github.com/bdwgc/bdwgc
+upstreams   :
+    - https://github.com/bdwgc/bdwgc/archive/refs/tags/v8.2.12.tar.gz : d09001f45dabf1c29a5df3e63020a4bab5ad4aad69137bb07100c717e2ecba0b
+summary     : UPDATE SUMMARY
+description : |
+    UPDATE DESCRIPTION
+license     : MIT # TODO: Can someone check the licence with me?
+
+setup       : |
+    %cmake
+build       : |
+    %cmake_build
+install     : |
+    %cmake_install
+check       : |
+    %cmake_test
