@@ -1,0 +1,54 @@
+/** Human readable report. This is not consumed by boulder */
+{
+	"manifest-version": "0.2",
+	"packages": {
+		"treecc": {
+			"build-depends": [
+				"binary(autoconf)",
+				"binary(automake)",
+				"binary(bison)",
+				"binary(flex)",
+				"binary(git)",
+				"binary(sd)",
+				"binutils",
+				"texinfo"
+			],
+			"depends": [
+				"interpreter(/usr/lib/ld-linux-x86-64.so.2(x86_64))",
+				"soname(libc.so.6(x86_64))"
+			],
+			"files": [
+				"/usr/bin/treecc",
+				"/usr/share/info/dir",
+				"/usr/share/info/treecc.info",
+				"/usr/share/man/man1/treecc.1"
+			],
+			"name": "treecc",
+			"provides": [
+				"binary(treecc)"
+			]
+		},
+		"treecc-devel": {
+			"build-depends": [
+				"binary(autoconf)",
+				"binary(automake)",
+				"binary(bison)",
+				"binary(flex)",
+				"binary(git)",
+				"binary(sd)",
+				"binutils",
+				"texinfo"
+			],
+			"depends": [
+				"treecc"
+			],
+			"files": [
+				"/usr/lib/libtreecc.a"
+			],
+			"name": "treecc-devel"
+		}
+	},
+	"source-name": "treecc",
+	"source-release": "1",
+	"source-version": "1"
+}

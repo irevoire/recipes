@@ -1,0 +1,34 @@
+# SPDX-FileCopyrightText: 2026 aerynOS Developers
+# SPDX-License-Identifier: MPL-2.0
+
+name        : treecc 
+version     : "1"
+release     : 1
+homepage    : https://dotgnu.org/ 
+upstreams   :
+    - git|git://git.git.savannah.gnu.org/dotgnu-pnet/treecc.git : 864ed4f6ed3165472f4b45f55576eaa189d8238d
+summary     : The DotGNU project aims to be for webservices and for C# programs what GNU/Linux is rapidly becoming for desktop and server applications
+description : |
+    UPDATE DESCRIPTION
+license     : UPDATE LICENSE
+builddeps   :
+    - binary(git)
+    - binary(flex)
+    - binary(bison)
+    - binary(autoconf)
+    - binary(automake)
+    - binutils
+    - binary(sd)
+    - texinfo
+setup       : |
+    # That was the default at the time and is causing linking issue if not specified
+    export CFLAGS="$CFLAGS -fcommon -std=gnu89 -O0 -g3 -no-pie"
+
+    # The texi syntax changed over time, we don't need to put {} after @center
+    sd '^@center\{(.*)\}$' '@center $1' doc/*.texi
+    mv auto_gen.sh autogen.sh
+    %autogen --enable-threads=no
+build       : |
+    %make -j1
+install     : |
+    %make_install
