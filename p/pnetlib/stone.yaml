@@ -1,0 +1,41 @@
+# SPDX-FileCopyrightText: 2026 aerynOS Developers
+# SPDX-License-Identifier: MPL-2.0
+
+name        : pnetlib 
+version     : "1"
+release     : 1
+homepage    : https://dotgnu.org/ 
+upstreams   :
+    - git|git://git.git.savannah.gnu.org/dotgnu-pnet/pnetlib.git : c3c12b8b0c65f5482d03d6a4865f7670e98baf4c
+summary     : The DotGNU project aims to be for webservices and for C# programs what GNU/Linux is rapidly becoming for desktop and server applications
+description : |
+    UPDATE DESCRIPTION
+license     : UPDATE LICENSE
+networking  : true
+builddeps   :
+    - binary(git)
+    - binary(flex)
+    - binary(bison)
+    - binary(autoconf)
+    - binary(automake)
+    - binutils
+    - binary(sd)
+    - texinfo
+    - bdwgc-devel
+    - libffi-devel
+    - treecc-devel
+    - pnet-devel
+tuning      :
+    - lto: false
+setup       : |
+    # That was the default at the time and is causing linking issue if not specified
+    export CFLAGS="$CFLAGS -fcommon -std=gnu89 -O0 -g3 -no-pie"
+
+    mv auto_gen.sh autogen.sh
+    %autogen --enable-threads=no
+build       : |
+    %make -j1
+install     : |
+    %make_install
+# It doesn't work with clang. I don't know why.
+toolchain: gnu
